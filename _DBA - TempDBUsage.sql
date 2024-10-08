@@ -1,14 +1,6 @@
 
 USE master
 GO
-EXEC sp_configure 'show advanced options', 1;  
-GO  
-RECONFIGURE WITH OVERRIDE;  
-GO  
-EXEC sp_configure 'blocked process threshold', 1;  
-GO   
-RECONFIGURE WITH OVERRIDE;  
-GO
 CREATE EVENT SESSION [TempDBAutogrowth] ON SERVER 
 ADD EVENT sqlserver.database_file_size_change(
     ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,sqlserver.database_name,sqlserver.session_id,sqlserver.sql_text)
@@ -21,22 +13,7 @@ WITH (MAX_MEMORY=4096 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPAT
 GO
 ALTER EVENT SESSION [TempDBAutogrowth] ON SERVER STATE = START;
 GO
-CREATE EVENT SESSION [PerformanceIssues] ON SERVER 
-ADD EVENT sqlserver.blocked_process_report(
-	ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,sqlserver.database_name,sqlserver.query_hash,sqlserver.session_id,sqlserver.sql_text,sqlserver.username)),
-ADD EVENT sqlserver.rpc_completed(SET collect_statement=(1)
-	ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,sqlserver.database_name,sqlserver.query_hash,sqlserver.session_id,sqlserver.sql_text,sqlserver.username)
-	WHERE ([package0].[greater_than_equal_uint64]([duration],(250000)))),
-ADD EVENT sqlserver.sql_batch_completed(
-	ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,sqlserver.database_name,sqlserver.query_hash,sqlserver.session_id,sqlserver.sql_text,sqlserver.username)
-	WHERE ([package0].[greater_than_equal_uint64]([duration],(250000)))),
-ADD EVENT sqlserver.xml_deadlock_report(
-	ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,sqlserver.database_name,sqlserver.query_hash,sqlserver.session_id,sqlserver.sql_text,sqlserver.username))
-ADD TARGET package0.event_file(SET filename=N'PerformanceIssues',max_file_size=(50),max_rollover_files=(10))
-WITH (MAX_MEMORY=4096 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPATCH_LATENCY=30 SECONDS,MAX_EVENT_SIZE=0 KB,MEMORY_PARTITION_MODE=NONE,TRACK_CAUSALITY=ON,STARTUP_STATE=ON)
-GO
-ALTER EVENT SESSION [PerformanceIssues] ON SERVER STATE = START;
-GO
+	
 If not exists (SELECT name from sys.databases where name = '_DBA') BEGIN
 	CREATE DATABASE [_DBA];
 	ALTER DATABASE [_DBA] SET RECOVERY SIMPLE; 
@@ -58,7 +35,8 @@ CREATE CLUSTERED INDEX [CI_TempDBUsage_CollectTime]
 ON [dbo].[TempDBUsage]
 (
 	[CollectTime] ASC
-)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) 
+ON [PRIMARY]
 GO
 
 
@@ -131,7 +109,7 @@ WHERE CollectTime < DATEADD(WEEK,-4,getdate())',
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'CollectorSchedule_Every_5min', 
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'_DBA - TempDBUsage', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
